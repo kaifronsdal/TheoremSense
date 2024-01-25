@@ -27,5 +27,5 @@ def load_datasets(datasets_list):
     """
     Loads datasets from huggingface datasets library
     """
-    return [datasets.load_dataset(dataset, config) for dataset in datasets_list
+    return [datasets.load_dataset(dataset['name'], config) for dataset in datasets_list
             for config in dataset['configs']]
