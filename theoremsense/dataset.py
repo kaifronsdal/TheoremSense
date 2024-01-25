@@ -31,7 +31,7 @@ class HendrycksDataset(Dataset):
 def _map_hendrycks_data(data):
     return {
         'question': data['problem'],
-        'answer': data['answer'],
+        'answer': data['solution'],
         'level': data['level'],
         'type': data['type']
     }
