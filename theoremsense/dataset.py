@@ -9,6 +9,7 @@ Proofs:
 """
 
 import datasets
+import re
 from dataclasses import dataclass
 
 
@@ -23,7 +24,12 @@ def _default_map(data):
 
 
 @dataclass
-class HendrycksDataset(Dataset):
+class BoxedDataset:
+    boxed: str
+
+
+@dataclass
+class HendrycksDataset(BoxedDataset):
     level: str
     type: str
 
@@ -31,15 +37,24 @@ class HendrycksDataset(Dataset):
 def _map_hendrycks_data(data):
     return {
         'question': data['problem'],
-        'answer': data['answer'],
+        'answer': data['problem'],
+        'boxed': re.search(r'\\boxed{(.*)}', data['problem']).group(1),
         'level': data['level'],
         'type': data['type']
     }
 
 
 @dataclass
-class GSM8KDataset(Dataset):
+class GSM8KDataset(BoxedDataset):
     pass
+
+
+def _map_gsm8k_data(data):
+    return {
+        'question': data['question'],
+        'answer': data['answer'],
+        'boxed': re.search(r'\\n#### (.*)', data['question']).group(1)
+    }
 
 
 BOXED_ANSWERS_DATASETS = [
@@ -53,7 +68,7 @@ BOXED_ANSWERS_DATASETS = [
         'name': 'gsm8k',
         'configs': ['main'],
         'class': GSM8KDataset,
-        'map': _default_map
+        'map': _map_gsm8k_data
     }
 ]
 PROOFS_DATASETS = []
