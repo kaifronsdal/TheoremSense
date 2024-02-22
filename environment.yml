@@ -9,3 +9,12 @@ dependencies:
   - datasets
   - certifi
   - fsspec=2023.9.2
+  - jupyterlab
+  - ipywidgets
+  - matplotlib
+  - seaborn
+  - accelerate
+  - bitsandbytes
+  - pip:
+      - vllm
+      - flash-attn
