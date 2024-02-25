@@ -62,7 +62,15 @@ def generate_predictions(prompts, pipe, output_path, override=False, generate_co
     #     output = [o[len(p):] for o, p in zip(output, batch_prompts)]
     #     outputs.extend(output)
 
-    outputs = pipe(prompts, **generate_config)
+    chunk_size = generate_config.get('batch_size', 8) * 4
+
+    outputs = []
+    for i in tqdm(range(0, len(prompts), chunk_size)):
+        batch_prompts = prompts[i:i + chunk_size]
+        batch_outputs = pipe(batch_prompts, **generate_config)
+        outputs.extend(batch_outputs)
+
+    # outputs = [o for o in tqdm(pipe(prompts, **generate_config))]
 
     with open(output_path, 'wb') as f:
         pickle.dump(outputs, f)
@@ -92,7 +100,7 @@ def batched_teacher_forcing_predictions(prompts, solutions, model, tokenizer, de
     input = tokenizer([f"{p}\n\n{s}" for p, s in zip(prompts, solutions)], return_tensors="pt", padding=True,
                       truncation=True)
     prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
-    
+
     with torch.no_grad():
         response = model(input.input_ids.to(DEVICE), attention_mask=input.attention_mask.to(DEVICE))
     # get the response ids for the solution part of the input
