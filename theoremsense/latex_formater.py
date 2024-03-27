@@ -59,6 +59,7 @@ def fix_sqrt(string):
     if "\\sqrt" not in string:
         return string
     splits = string.split("\\sqrt")
+
     new_string = splits[0]
     for split in splits[1:]:
         if split[0] != "{":

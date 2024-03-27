@@ -16,8 +16,14 @@ import torch
 
 from pathlib import Path
 from tqdm import tqdm
-import pickle
+import contextlib
 from enum import Enum
+
+
+@contextlib.contextmanager
+def suppress_print():
+    with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
+        yield
 
 
 class Method(Enum):
@@ -51,7 +57,7 @@ def preprocess_dataset(dataset, split, nshot=True, n=3):
 
 
 @save_output
-def generate_autoregressive(prompts, llm, sampling_params):
+def generate_autoregressive(prompts, solutions, llm, sampling_params):
     # chunk_size = generate_config.get('batch_size', 8) * 4
 
     outputs = llm.generate(prompts, sampling_params)
@@ -62,7 +68,7 @@ def generate_autoregressive(prompts, llm, sampling_params):
     #     batch_outputs = pipe(batch_prompts, **generate_config)
     #     outputs.extend(batch_outputs)
 
-    return outputs
+    return outputs, solutions
 
 
 def batched_teacher_forcing_predictions(prompts, solutions, model, tokenizer, device, debug=False):
@@ -154,7 +160,7 @@ def main():
     # Sampling parameters
     parser.add_argument('--temperature', type=float, default=0.8, help='Temperature for sampling.')
     parser.add_argument('--top_p', type=float, default=0.95, help='Top-p sampling.')
-    parser.add_argument('--max_tokens', type=int, default=512, help='Maximum number of tokens to generate.')
+    parser.add_argument('--max_tokens', type=int, default=2048, help='Maximum number of tokens to generate.')
     parser.add_argument('--num_shots', type=int, default=0, help='Number of shots to generate')
     parser.add_argument('--num_logprob', type=int, default=100, help='Number of logprobs to generate')
 
@@ -186,7 +192,9 @@ def main():
     datasets = args.dataset.split(',')
     output = args.output
 
-    datas = from_name(datasets, subset=args.subset)
+    with suppress_print():
+        datas = from_name(datasets, subset=args.subset)
+
     for data in datas:
         # clear gpu memory
         torch.cuda.empty_cache()
@@ -203,7 +211,7 @@ def main():
 
         if args.method == Method.AUTOREGRESSIVE:
             save_path = save_dir / f'{args.model.replace("/", "_")}_autoregressive.pkl'
-            predictions = generate_autoregressive(prompts, model, sampling_params, output_path=save_path,
+            predictions = generate_autoregressive(prompts, solutions, model, sampling_params, output_path=save_path,
                                                   override=args.override)
         elif args.method == Method.TEACHER_FORCING:
             save_path = save_dir / f'{args.model.replace("/", "_")}_teacher_forcing.pkl'
