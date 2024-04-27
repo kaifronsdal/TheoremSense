@@ -1,0 +1,42 @@
+# args.model = 'mistralai/Mistral-7B-Instruct-v0.2'
+# args.use_chat = True
+# args.model = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+# args.use_chat = True
+# args.model = 'tiiuae/falcon-7b'  # Don't use?
+# args.use_chat = False
+# args.model = 'meta-llama/Llama-2-7b-chat-hf'
+# args.use_chat = True
+# args.model = 'meta-llama/Llama-2-13b-chat-hf'
+# args.use_chat = True
+# args.model = 'meta-llama/Llama-2-70b-chat-hf'
+# args.use_chat = True
+# args.model = 'meta-llama/Meta-Llama-3-8B-Instruct'
+# args.use_chat = True
+# args.model = 'meta-llama/Meta-Llama-3-70B-Instruct'
+# args.use_chat = True
+# args.model = 'deepseek-ai/deepseek-math-7b-instruct'
+# args.use_chat = True
+# args.model = 'deepseek-ai/deepseek-llm-67b-chat'
+# args.use_chat = True
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+# loop over all models, num_gpu pairs
+args=(
+    "mistralai/Mistral-7B-Instruct-v0.2" 1
+    "mistralai/Mixtral-8x7B-Instruct-v0.1" 4
+    "meta-llama/Llama-2-7b-chat-hf" 1
+    "meta-llama/Llama-2-13b-chat-hf" 1
+    "meta-llama/Llama-2-70b-chat-hf" 4
+    "meta-llama/Meta-Llama-3-8B-Instruct" 1
+    "meta-llama/Meta-Llama-3-70B-Instruct" 4
+    "deepseek-ai/deepseek-math-7b-instruct" 1
+    "deepseek-ai/deepseek-llm-67b-chat" 4
+)
+
+for ((i=0; i<${#args[@]}; i+=2))
+do
+    model=${args[i]}
+    num_gpu=${args[i+1]}
+    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --use_chat --model $model --tensor_parallel_size $num_gpu"
+    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --use_chat --model $model --tensor_parallel_size $num_gpu
+done
