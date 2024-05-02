@@ -13,8 +13,7 @@ dependencies:
   - ipywidgets
   - matplotlib
   - seaborn
-  - accelerate
-  - bitsandbytes
+  - sympy
   - pip:
       - vllm
       - flash-attn
