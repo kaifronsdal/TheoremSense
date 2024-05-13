@@ -1,6 +1,7 @@
-name: TheoremSense
+name: TheoremSense2
 channels:
   - defaults
+  - pytorch
 dependencies:
   - python=3.10
   - huggingface_hub
@@ -14,6 +15,8 @@ dependencies:
   - matplotlib
   - seaborn
   - sympy
+  - accelerate
+  - pip
   - pip:
       - vllm
-      - flash-attn
+      - google-generativeai

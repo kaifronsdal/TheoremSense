@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 if 'CUDA_VISIBLE_DEVICES' not in os.environ:
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -14,6 +15,7 @@ import numpy as np
 import datasets as hf_datasets
 
 from utils import save_arguments
+import torch
 
 from blocks import vLLM, Gemini, HFModel
 from blocks import Generator, Prompt, Batch, Block, Map, Retry
@@ -37,7 +39,8 @@ METHOD_MAP = {
     'ar': 'autoregressive',
     'autoregressive': 'autoregressive',
     'tf': 'teacher forcing',
-    'teacher forcing': 'teacher forcing'
+    'teacher_forcing': 'teacher_forcing',
+    'teacher forcing': 'teacher_forcing'
 }
 
 DATASET_CONFIGS = {
@@ -55,15 +58,48 @@ DATASET_ALIASES.update({dataset_name: dataset_name for dataset_name in DATASET_C
 
 
 class TeacherForcing(Block):
+    parallel = True
+
     def __init__(self, model):
         super().__init__()
         assert isinstance(model, HFModel)
         self.model = model
 
+    def compute_metrics(self, outputs: list[dict]):
+        metrics = []
+        for output in outputs:
+            metric = {}
+            # TF accuracy
+            # metrics['tfa'].append(np.mean(output['teacher_forced_ids'] == output['solution_ids']))
+            metric['tfa'].append(torch.mean((output['teacher_forced_ids'] == output['solution_ids']).float()).item())
+            # TFCE
+            TFCE = torch.nn.functional.cross_entropy(output['teacher_forced_logits'], output['solution_ids']).item()
+            metric['tfce'].append(TFCE)
+            # Perplexity
+            metric['perpelexity'].append(np.exp(TFCE))
+            # sumCE
+            CE = torch.nn.functional.cross_entropy(output['teacher_forced_logits'], output['solution_ids'],
+                                                   reduction='sum').item()
+            metric['sumCE'].append(CE)
+            # BPC
+            metric['bpc'].append(CE / (output['solution_num_chars'] * np.log(2)))
+            # num tokens/chars
+            metric['total_num_tokens'].append(output['total_num_tokens'])
+            metric['prompt_num_tokens'].append(output['prompt_num_tokens'])
+            metric['solution_num_tokens'].append(output['solution_num_tokens'])
+            metric['total_num_chars'].append(output['total_num_chars'])
+            metric['prompt_num_chars'].append(output['prompt_num_chars'])
+            metric['solution_num_chars'].append(output['solution_num_chars'])
+
+            metrics.append(metric)
+
+        return metrics
+
     def process(self, input):
         if not isinstance(input, Batch):
             input = Batch([input])
         output = self.model.generate_teacher_forcing(input)
+        output = self.compute_metrics(output)
         return Batch(output) if isinstance(input, Batch) else output[0]
 
     def convert_tokens(self, tokens):
@@ -305,10 +341,19 @@ def prompt_generator(args):
 
 
 def hard_coded_prompt_generator(args):
-    def hard_coded_prompt(input):
-        return PROMPT + "\n\n" + "Problem:" + "\n" + input['problem'] + "\n\n" + "Solution:"
+    if args.method == 'teacher_forcing':
+        def hard_coded_prompt(input):
+            return {
+                'question': PROMPT + "\n\n" + "Problem:" + "\n" + input['problem'] + "\n\n" + "Solution:",
+                'solution': input['solution']
+            }
 
-    return Map(hard_coded_prompt)
+        return Map(hard_coded_prompt)
+    else:
+        def hard_coded_prompt(input):
+            return PROMPT + "\n\n" + "Problem:" + "\n" + input['problem'] + "\n\n" + "Solution:"
+
+        return Map(hard_coded_prompt)
 
 
 def evaluate(gen, batch, args):
