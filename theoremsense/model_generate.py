@@ -71,25 +71,25 @@ class TeacherForcing(Block):
             metric = {}
             # TF accuracy
             # metrics['tfa'].append(np.mean(output['teacher_forced_ids'] == output['solution_ids']))
-            metric['tfa'].append(torch.mean((output['teacher_forced_ids'] == output['solution_ids']).float()).item())
+            metric['tfa'] = torch.mean((output['teacher_forced_ids'] == output['solution_ids']).float()).item()
             # TFCE
             TFCE = torch.nn.functional.cross_entropy(output['teacher_forced_logits'], output['solution_ids']).item()
-            metric['tfce'].append(TFCE)
+            metric['tfce'] = TFCE
             # Perplexity
-            metric['perpelexity'].append(np.exp(TFCE))
+            metric['perpelexity'] = np.exp(TFCE)
             # sumCE
             CE = torch.nn.functional.cross_entropy(output['teacher_forced_logits'], output['solution_ids'],
                                                    reduction='sum').item()
-            metric['sumCE'].append(CE)
+            metric['sumCE'] = CE
             # BPC
-            metric['bpc'].append(CE / (output['solution_num_chars'] * np.log(2)))
+            metric['bpc'] = CE / (output['solution_num_chars'] * np.log(2))
             # num tokens/chars
-            metric['total_num_tokens'].append(output['total_num_tokens'])
-            metric['prompt_num_tokens'].append(output['prompt_num_tokens'])
-            metric['solution_num_tokens'].append(output['solution_num_tokens'])
-            metric['total_num_chars'].append(output['total_num_chars'])
-            metric['prompt_num_chars'].append(output['prompt_num_chars'])
-            metric['solution_num_chars'].append(output['solution_num_chars'])
+            metric['total_num_tokens'] = output['total_num_tokens']
+            metric['prompt_num_tokens'] = output['prompt_num_tokens']
+            metric['solution_num_tokens'] = output['solution_num_tokens']
+            metric['total_num_chars'] = output['total_num_chars']
+            metric['prompt_num_chars'] = output['prompt_num_chars']
+            metric['solution_num_chars'] = output['solution_num_chars']
 
             metrics.append(metric)
 
