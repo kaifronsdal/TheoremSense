@@ -48,11 +48,8 @@ for ((i=0; i<${#args[@]}; i+=2))
 do
     model=${args[i]}
     num_gpu=${args[i+1]}
-<<<<<<< HEAD
-    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=16"
-    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=16
-=======
-    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8"
-    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8
->>>>>>> 99cf5e6f9017a882bc141910e1ca77ebd63a7b1e
+#    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=16"
+#    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=16
+    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --detect_chat --model $model --tensor_parallel_size $num_gpu --split test"
+    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --detect_chat --model $model --tensor_parallel_size $num_gpu --split test
 done

@@ -91,6 +91,8 @@ class TeacherForcing(Block):
             metric['prompt_num_chars'] = output['prompt_num_chars']
             metric['solution_num_chars'] = output['solution_num_chars']
 
+            metric['raw'] = output
+
             metrics.append(metric)
 
         return metrics
@@ -394,10 +396,11 @@ def eval(args):
                 / MODEL_MAP[args.model]
                 / args.method
         )
-        save_dir.mkdir(parents=True, exist_ok=True)
         if save_dir.exists() and not args.override:
             print(f'Output path {save_dir} already exists. Use --override to overwrite. Skipping...')
             continue
+
+        save_dir.mkdir(parents=True, exist_ok=True)
 
         predictions = evaluate(gen, batch, args)
 
