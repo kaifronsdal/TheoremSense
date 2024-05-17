@@ -14,6 +14,7 @@
     "deepseek-ai/deepseek-math-7b-instruct": "Deepseek-7b-Instruct",
     "deepseek-ai/deepseek-llm-67b-chat": "Deepseek-67b",
     "EleutherAI/llemma_7b": "LLeMMA-7b",
+    "EleutherAI/llemma_34b": "LLeMMA-34b",
     "GAIR/Abel-7B-002": "Abel-7b",
     "google/gemma-7b": "Gemma-7b",
     "google/gemma-7b-it": "Gemma-7b-Instruct",
@@ -30,6 +31,8 @@
     "meta-llama/Meta-Llama-3-8B-Instruct": "Meta-Llama-3-8b-Instruct",
     "mistralai/Mistral-7B-Instruct-v0.2": "Mistral-7b-Instruct-v0.2",
     "mistralai/Mixtral-8x7B-Instruct-v0.1": "Mixtral-8x7b-Instruct-v0.1",
+    "mistralai/Mixtral-8x22B-v0.1": "Mixtral-8x22b-v0.1",
+    "mistralai/Mixtral-8x22B-Instruct-v0.1": "Mixtral-8x22b-Instruct-v0.1",
     "meta-llama/Meta-Llama-3-70B-Instruct": "Meta-Llama-3-70b-Instruct",
     "morph-labs/morph-prover-v0-7b": "Morph-7b-v0",
     "Qwen/Qwen1.5-7B-Chat-AWQ": "Qwen-7b"
