@@ -19,7 +19,7 @@
 # args.model = 'deepseek-ai/deepseek-llm-67b-chat'
 # args.use_chat = True
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=3,4,5,6
+export CUDA_VISIBLE_DEVICES=3,4
 # loop over all models, num_gpu pairs
 args=(
     "meta-llama/Meta-Llama-3-70B-Instruct" 4
@@ -37,7 +37,7 @@ args=(
     "meta-llama/Meta-Llama-3-8B-Instruct" 1
     "deepseek-ai/deepseek-math-7b-instruct" 1
     "deepseek-ai/deepseek-math-7b-rl" 1
-# )
+
     "EleutherAI/llemma_7b" 1
     "GAIR/Abel-7B-002" 1
     "google/gemma-7b-it" 1
@@ -48,6 +48,9 @@ for ((i=0; i<${#args[@]}; i+=2))
 do
     model=${args[i]}
     num_gpu=${args[i+1]}
-    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8 --split test"
-    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8 --split test
+#    echo "python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --method autoregressive --batch_size=8 --split test"
+#    python model_generate.py --num_shots 4 --output ~/model_evals --dataset math --detect_chat --model $model --tensor_parallel_size $num_gpu --method autoregressive --batch_size=8 --split test
+
+    echo "python model_generate.py --num_shots 4 --output ~/model_evals_temp --dataset math --override --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8 --split test"
+    python model_generate.py --num_shots 4 --override --output ~/model_evals_temp --dataset math --detect_chat --model $model --tensor_parallel_size $num_gpu --backend hf --method teacher_forcing --batch_size=8 --split test
 done

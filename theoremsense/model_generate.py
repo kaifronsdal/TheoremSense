@@ -16,6 +16,7 @@ import datasets as hf_datasets
 
 from utils import save_arguments
 import torch
+from torch.nn.functional import log_softmax
 
 from blocks import vLLM, Gemini, HFModel
 from blocks import Generator, Prompt, Batch, Block, Map, Retry
@@ -68,7 +69,7 @@ class TeacherForcing(Block):
     def compute_metrics(self, outputs: list[dict]):
         metrics = []
         for output in outputs:
-            metric = {}
+            metric = dict()
             # TF accuracy
             # metrics['tfa'].append(np.mean(output['teacher_forced_ids'] == output['solution_ids']))
             metric['tfa'] = torch.mean((output['teacher_forced_ids'] == output['solution_ids']).float()).item()
@@ -91,16 +92,28 @@ class TeacherForcing(Block):
             metric['prompt_num_chars'] = output['prompt_num_chars']
             metric['solution_num_chars'] = output['solution_num_chars']
 
+            # metric['raw'] = output
+            # shape = (num_tokens, vocab_size)
+            log_probs = log_softmax(output['teacher_forced_logits'], dim=-1)
+            chosen_log_probs = torch.gather(log_probs, dim=-1, index=output['solution_ids'].unsqueeze(-1)).squeeze(-1)
+            metric['chosen_log_probs'] = chosen_log_probs.tolist()
+
             metrics.append(metric)
 
         return metrics
 
     def process(self, input):
+        is_batch = True
         if not isinstance(input, Batch):
             input = Batch([input])
+            is_batch = False
+        print('=' * 80)
+        print(f'len input: {len(input)}')
         output = self.model.generate_teacher_forcing(input)
+        print(f'len output: {len(output)}')
+        print('=' * 80)
         output = self.compute_metrics(output)
-        return Batch(output) if isinstance(input, Batch) else output[0]
+        return Batch(output) if is_batch else output[0]
 
     def convert_tokens(self, tokens):
         return [self.model.tokenizer.decode(t) for t in tokens]
@@ -394,15 +407,18 @@ def eval(args):
                 / MODEL_MAP[args.model]
                 / args.method
         )
-        save_dir.mkdir(parents=True, exist_ok=True)
         if save_dir.exists() and not args.override:
             print(f'Output path {save_dir} already exists. Use --override to overwrite. Skipping...')
             continue
 
+        save_dir.mkdir(parents=True, exist_ok=True)
+
         predictions = evaluate(gen, batch, args)
 
-        with open(save_dir / 'output.json', 'w') as f:
-            json.dump(predictions, f, indent=4)
+        with open(save_dir / 'output.pkl', 'wb') as f:
+            # json.dump(predictions, f, indent=4)
+            import pickle
+            pickle.dump(predictions, f)
 
         save_arguments(args, save_dir / 'args.json')
 
