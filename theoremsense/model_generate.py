@@ -68,7 +68,7 @@ class TeacherForcing(Block):
     def compute_metrics(self, outputs: list[dict]):
         metrics = []
         for output in outputs:
-            metric = {}
+            metric = dict()
             # TF accuracy
             # metrics['tfa'].append(np.mean(output['teacher_forced_ids'] == output['solution_ids']))
             metric['tfa'] = torch.mean((output['teacher_forced_ids'] == output['solution_ids']).float()).item()
