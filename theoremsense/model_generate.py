@@ -415,10 +415,12 @@ def eval(args):
 
         predictions = evaluate(gen, batch, args)
 
-        with open(save_dir / 'output.pkl', 'wb') as f:
-            # json.dump(predictions, f, indent=4)
-            import pickle
-            pickle.dump(predictions, f)
+        # with open(save_dir / 'output.pkl', 'wb') as f:
+        #     import pickle
+        #     pickle.dump(predictions, f)
+        
+        with open(save_dir / 'output.json', 'w') as f:
+            json.dump(predictions, f, indent=4)
 
         save_arguments(args, save_dir / 'args.json')
 
