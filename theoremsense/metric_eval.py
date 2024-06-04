@@ -1,13 +1,30 @@
 import os
 
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+# parser.add_argument('--gpu', type=int, default=1)
+parser.add_argument('--index', type=int, default=0)
+args = parser.parse_args()
+
+GPU_MAPPING = {
+    0: "2",
+    1: "3",
+    2: "4",
+    3: "5",
+    4: "6",
+    5: "7",
+}
+
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = GPU_MAPPING[args.index]
 
 from pathlib import Path
 import pandas as pd
 from latex_formater import get_final_answer
 
 save_path = Path('~/GitHub/gold-ai-olympiad/data/MATH/Predictions/').expanduser()
+# save_path.mkdir(parents=True, exist_ok=True)
 
 # load the results and combine them back into a single dataframe
 results = pd.concat([
@@ -43,6 +60,58 @@ class BoxedMatch(Metric):
         # cols = ['dataset', 'i', 'model', 'method', 'boxed_true', 'boxed_pred', 'boxed_match']
         # cols.extend([col for col in results.columns if col not in cols])
         return results  # [cols]
+
+
+# import torch
+#
+# torch.set_float32_matmul_precision('medium')
+
+# from comet import download_model, load_from_checkpoint
+#
+#
+# class COMET(Metric):
+#     def __init__(self, model_name="Unbabel/XCOMET-XL", batch_size=32, gpus=1):
+#         super().__init__()
+#         self.model_name = model_name
+#         self.model_path = download_model(model_name)
+#         self.model = load_from_checkpoint(self.model_path)
+#
+#         self.batch_size = batch_size
+#         self.gpus = gpus
+#
+#     def process(self, results):
+#         data = [
+#             {
+#                 "src": str(row['problem']),
+#                 "mt": str(row['prediction']),
+#                 "ref": str(row['solution'])
+#             } for _, row in results.iterrows()
+#         ]
+#         model_output = self.model.predict(data, batch_size=self.batch_size, gpus=self.gpus)
+#         # results[self.model_name] = model_output
+#         return model_output
+
+# comet = COMET()
+# print('COMET')
+# results = comet(results)
+#
+# temp_save_path = save_path / 'temp2'
+# # ensure exists
+# temp_save_path.mkdir(parents=True, exist_ok=True)
+# # results.to_json(temp_save_path)
+# import pickle
+#
+# with open(temp_save_path / 'comet.pkl', 'wb') as f:
+#     pickle.dump(results, f)
+
+# def __init__(self):
+#     super().__init__()
+#
+# def process(self, results):
+#     pass
+#
+# def __call__(self, results):
+#     return self.process(results)
 
 
 from nltk.tokenize import sent_tokenize
@@ -129,36 +198,6 @@ class ROSCOE(Metric):
         return scores
 
 
-# import torch
-# # Set for comet:
-# torch.set_float32_matmul_precision('medium')
-
-from comet import download_model, load_from_checkpoint
-
-
-class COMET(Metric):
-    def __init__(self, model_name="Unbabel/XCOMET-XL", batch_size=32, gpus=1):
-        super().__init__()
-        self.model_name = model_name
-        self.model_path = download_model(model_name)
-        self.model = load_from_checkpoint(self.model_path)
-
-        self.batch_size = batch_size
-        self.gpus = gpus
-
-    def process(self, results):
-        data = [
-            {
-                "src": str(row['problem']),
-                "mt": str(row['prediction']),
-                "ref": str(row['solution'])
-            } for _, row in results.iterrows()
-        ]
-        model_output = self.model.predict(data, batch_size=self.batch_size, gpus=self.gpus)
-        # results[self.model_name] = model_output
-        return model_output
-
-
 # comet = COMET()
 # print('COMET')
 # results = comet(results)
@@ -180,6 +219,7 @@ temp_save_path.mkdir(parents=True, exist_ok=True)
 # group by dataset
 roscoe = ROSCOE()
 import pickle
+import numpy as np
 
 print(f'total len: {len(results.groupby("dataset"))}')
 
@@ -190,15 +230,22 @@ dataset_groups = ['Number_Theory_test', 'Counting_and_Probability_train', 'Algeb
                   'Geometry_train', 'Algebra_train', 'Precalculus_test']
 
 # split amongst 3 runs
-num_runs = 3
-i = 2
+num_runs = len(GPU_MAPPING)
+i = args.index
 datasets_for_this_run = dataset_groups[i::num_runs]
 print(f'Processing {datasets_for_this_run}')
 results = results[results['dataset'].isin(datasets_for_this_run)]
+results = results.query('method == "autoregressive"')
 
 # for dataset, group in results.groupby('dataset'):
 # iterate in reverse order so that we can checkpoint our progress
 for dataset, group in reversed(list(results.groupby('dataset'))):
+    # sample 300 examples per model
+    question_ids = np.random.choice(group['i'].unique(), size=300, replace=False)
+    print(f'Number of questions: {len(question_ids)}')
+    group = group[group['i'].isin(question_ids)]
+    print(f'Processing {dataset} with {len(group)} examples and {len(group["model"].unique())} models')
+    # breakpoint()
     output = roscoe(group)
     # group.to_json(temp_save_path / f'{dataset}.json')
     with open(temp_save_path / f'{dataset}.pkl', 'wb') as f:

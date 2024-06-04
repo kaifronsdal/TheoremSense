@@ -445,12 +445,13 @@ class Evaluator:
             return [[]]
         encoded_input = self.tokenizer(
             reasoning, truncation=True, padding=True, return_tensors="pt"
-        )["input_ids"]
+        )
         with torch.no_grad():
-            model_output = self.model(encoded_input.to(self.device))
+            model_output = self.model(encoded_input['input_ids'].to(self.device),
+                                      encoded_input['attention_mask'].to(self.device))
         embeddings = []
 
-        pads = (encoded_input == self.tokenizer.pad_token_id).nonzero()
+        pads = (encoded_input['input_ids'] == self.tokenizer.pad_token_id).nonzero()
         j = 0
         for i, emb in enumerate(model_output[0]):
             while j < len(pads) and pads[j][0] < i:
