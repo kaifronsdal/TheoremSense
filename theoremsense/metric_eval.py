@@ -1,7 +1,7 @@
 import os
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 from pathlib import Path
 import pandas as pd
@@ -90,8 +90,8 @@ from roscoe.score import Evaluator
 
 class ROSCOE(Metric):
     def __init__(self, score_types=REASONING_SCORES, model_type=SIMSCE,
-                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large", discourse_batch=64 * 16,
-                 coherence_batch=64 * 16):
+                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large", discourse_batch=64 * 8,
+                 coherence_batch=64 * 8, ppl_batch=64 * 8, grammar_batch=64 * 8):
         super().__init__()
         self.evaluator = Evaluator(
             score_types=score_types,
@@ -100,6 +100,8 @@ class ROSCOE(Metric):
             ppl_model=ppl_model,
             discourse_batch=discourse_batch,
             coherence_batch=coherence_batch,
+            ppl_batch=ppl_batch,
+            grammar_batch=grammar_batch,
             hypos=[],
             context=[],
         )
@@ -127,9 +129,9 @@ class ROSCOE(Metric):
         return scores
 
 
-import torch
-
-torch.set_float32_matmul_precision('medium')
+# import torch
+# # Set for comet:
+# torch.set_float32_matmul_precision('medium')
 
 from comet import download_model, load_from_checkpoint
 
@@ -157,32 +159,47 @@ class COMET(Metric):
         return model_output
 
 
-comet = COMET()
-print('COMET')
-results = comet(results)
-
-temp_save_path = save_path / 'temp2'
-# ensure exists
-temp_save_path.mkdir(parents=True, exist_ok=True)
-# results.to_json(temp_save_path)
-import pickle
-
-with open(temp_save_path / 'comet.pkl', 'wb') as f:
-    pickle.dump(results, f)
-
-# because scoring using roscoe takes so long, we will score in batches
-# # and checkpoint the results
-# temp_save_path = save_path / 'tempz'
+# comet = COMET()
+# print('COMET')
+# results = comet(results)
+#
+# temp_save_path = save_path / 'COMET'
 # # ensure exists
 # temp_save_path.mkdir(parents=True, exist_ok=True)
-# # group by dataset
-# roscoe = ROSCOE()
+# # results.to_json(temp_save_path)
 # import pickle
 #
-# # for dataset, group in results.groupby('dataset'):
-# # iterate in reverse order so that we can checkpoint our progress
-# for dataset, group in reversed(list(results.groupby('dataset'))):
-#     output = roscoe(group)
-#     # group.to_json(temp_save_path / f'{dataset}.json')
-#     with open(temp_save_path / f'{dataset}.pkl', 'wb') as f:
-#         pickle.dump(output, f)
+# with open(temp_save_path / 'comet2.pkl', 'wb') as f:
+#     pickle.dump(results, f)
+
+# because scoring using roscoe takes so long, we will score in batches
+# and checkpoint the results
+temp_save_path = save_path / 'ROSCOE'
+# ensure exists
+temp_save_path.mkdir(parents=True, exist_ok=True)
+# group by dataset
+roscoe = ROSCOE()
+import pickle
+
+print(f'total len: {len(results.groupby("dataset"))}')
+
+dataset_groups = ['Number_Theory_test', 'Counting_and_Probability_train', 'Algebra_test',
+                  'Geometry_test', 'Number_Theory_train', 'Prealgebra_test',
+                  'Intermediate_Algebra_train', 'Prealgebra_train', 'Precalculus_train',
+                  'Intermediate_Algebra_test', 'Counting_and_Probability_test',
+                  'Geometry_train', 'Algebra_train', 'Precalculus_test']
+
+# split amongst 3 runs
+num_runs = 3
+i = 2
+datasets_for_this_run = dataset_groups[i::num_runs]
+print(f'Processing {datasets_for_this_run}')
+results = results[results['dataset'].isin(datasets_for_this_run)]
+
+# for dataset, group in results.groupby('dataset'):
+# iterate in reverse order so that we can checkpoint our progress
+for dataset, group in reversed(list(results.groupby('dataset'))):
+    output = roscoe(group)
+    # group.to_json(temp_save_path / f'{dataset}.json')
+    with open(temp_save_path / f'{dataset}.pkl', 'wb') as f:
+        pickle.dump(output, f)

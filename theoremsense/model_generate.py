@@ -16,6 +16,7 @@ import datasets as hf_datasets
 
 from utils import save_arguments
 import torch
+from torch.nn.functional import log_softmax
 
 from blocks import vLLM, Gemini, HFModel
 from blocks import Generator, Prompt, Batch, Block, Map, Retry
@@ -91,18 +92,28 @@ class TeacherForcing(Block):
             metric['prompt_num_chars'] = output['prompt_num_chars']
             metric['solution_num_chars'] = output['solution_num_chars']
 
-            metric['raw'] = output
+            # metric['raw'] = output
+            # shape = (num_tokens, vocab_size)
+            log_probs = log_softmax(output['teacher_forced_logits'], dim=-1)
+            chosen_log_probs = torch.gather(log_probs, dim=-1, index=output['solution_ids'].unsqueeze(-1)).squeeze(-1)
+            metric['chosen_log_probs'] = chosen_log_probs.tolist()
 
             metrics.append(metric)
 
         return metrics
 
     def process(self, input):
+        is_batch = True
         if not isinstance(input, Batch):
             input = Batch([input])
+            is_batch = False
+        print('=' * 80)
+        print(f'len input: {len(input)}')
         output = self.model.generate_teacher_forcing(input)
+        print(f'len output: {len(output)}')
+        print('=' * 80)
         output = self.compute_metrics(output)
-        return Batch(output) if isinstance(input, Batch) else output[0]
+        return Batch(output) if is_batch else output[0]
 
     def convert_tokens(self, tokens):
         return [self.model.tokenizer.decode(t) for t in tokens]
@@ -404,6 +415,10 @@ def eval(args):
 
         predictions = evaluate(gen, batch, args)
 
+        # with open(save_dir / 'output.pkl', 'wb') as f:
+        #     import pickle
+        #     pickle.dump(predictions, f)
+        
         with open(save_dir / 'output.json', 'w') as f:
             json.dump(predictions, f, indent=4)
 
