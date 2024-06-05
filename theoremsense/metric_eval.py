@@ -7,24 +7,30 @@ parser = ArgumentParser()
 parser.add_argument('--index', type=int, default=0)
 args = parser.parse_args()
 
+# GPU_MAPPING = {
+#     0: "2",
+#     1: "3",
+#     2: "4",
+#     3: "5",
+#     4: "6",
+#     5: "7",
+#
+#     6: "2",
+#     7: "3",
+#     8: "4",
+#     9: "5",
+#     10: "6",
+#     11: "7",
+#
+#     12: "2",
+#     13: "3",
+#     14: "4",
+# }
+
 GPU_MAPPING = {
     0: "2",
     1: "3",
-    2: "4",
-    3: "5",
-    4: "6",
-    5: "7",
-
-    6: "2",
-    7: "3",
-    8: "4",
-    9: "5",
-    10: "6",
-    11: "7",
-
-    12: "2",
-    13: "3",
-    14: "4",
+    2: "5",
 }
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -69,7 +75,7 @@ class BoxedMatch(Metric):
 # import torch
 #
 # torch.set_float32_matmul_precision('medium')
-
+#
 # from comet import download_model, load_from_checkpoint
 #
 #
@@ -94,6 +100,7 @@ class BoxedMatch(Metric):
 #         model_output = self.model.predict(data, batch_size=self.batch_size, gpus=self.gpus)
 #         # results[self.model_name] = model_output
 #         return model_output
+
 
 # comet = COMET()
 # print('COMET')
@@ -126,6 +133,15 @@ from roscoe.score import (
     Evaluator,
     REASONING_SCORES,
     UNSUPERVISED_SCORES,
+
+    EMB_MODEL_SCORES,
+    NLI_MODEL_SCORES,
+    LANGUAGE_MODEL_SCORES,
+    GRAMMAR_MODEL_SCORES,
+
+    FAITHFUL_WORD,
+    REPETITION_WORD,
+
     SENT_TRANS,
     SIMSCE
 )
@@ -160,11 +176,30 @@ class ReasoningSteps(Chain):
 
 from roscoe.score import Evaluator
 
+EMB_MODEL_SCORES_FILTERED = [e for e in EMB_MODEL_SCORES if e not in [FAITHFUL_WORD, REPETITION_WORD]]
+
+USED_SCORES = {
+    0: EMB_MODEL_SCORES_FILTERED,
+    1: NLI_MODEL_SCORES,
+    2: LANGUAGE_MODEL_SCORES,
+    3: GRAMMAR_MODEL_SCORES
+}[args.index]
+
+USED_SCORES_NAME = {
+    0: 'EMB_MODEL_SCORES',
+    1: 'NLI_MODEL_SCORES',
+    2: 'LANGUAGE_MODEL_SCORES',
+    3: 'GRAMMAR_MODEL_SCORES'
+}[args.index]
+
+print(USED_SCORES)
+
 
 class ROSCOE(Metric):
-    def __init__(self, score_types=REASONING_SCORES, model_type=SIMSCE,
-                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large", discourse_batch=64 * 2,
-                 coherence_batch=64 * 2, ppl_batch=64 * 2, grammar_batch=64 * 2):
+    def __init__(self, score_types=USED_SCORES, model_type=SIMSCE,
+                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large",
+                 discourse_batch=64 * 2 * 4,
+                 coherence_batch=64 * 2 * 4, ppl_batch=64, grammar_batch=64 * 2):
         super().__init__()
         self.evaluator = Evaluator(
             score_types=score_types,
@@ -198,10 +233,26 @@ class ROSCOE(Metric):
         self.evaluator.set_context(context)
         scores = self.evaluator.evaluate()
         # print(scores)
-        # results['ROSCOE'] = scores
-        return scores
+        # scores is a dictionary of lists
+        try:
+            for key, value in scores.items():
+                results[key] = value
+            return results
+        except Exception as e:
+            print(e)
+            breakpoint()
+            return scores
 
 
+#
+# results = pd.concat([
+#     pd.read_json(save_path / f)
+#     for f in save_path.iterdir()
+#     if f.suffix == '.json'
+# ])
+#
+# results = results.query('method == "autoregressive"')
+#
 # comet = COMET()
 # print('COMET')
 # results = comet(results)
@@ -212,7 +263,7 @@ class ROSCOE(Metric):
 # # results.to_json(temp_save_path)
 # import pickle
 #
-# with open(temp_save_path / 'comet2.pkl', 'wb') as f:
+# with open(temp_save_path / 'comet_final.pkl', 'wb') as f:
 #     pickle.dump(results, f)
 
 # because scoring using roscoe takes so long, we will score in batches
@@ -224,6 +275,7 @@ temp_save_path.mkdir(parents=True, exist_ok=True)
 roscoe = ROSCOE()
 import pickle
 import numpy as np
+import json
 
 # print(f'total len: {len(results.groupby("dataset"))}')
 
@@ -243,24 +295,47 @@ print(f'Processing {datasets_for_this_run}')
 results = pd.concat([
     pd.read_json(save_path / f)
     for f in save_path.iterdir()
-    if f.suffix == '.json' and f.stem in datasets_for_this_run
+    if f.suffix == '.json'  # and f.stem in datasets_for_this_run
 ])
 
 print(f'Loaded {len(results)} results')
 
 # results = results[results['dataset'].isin(datasets_for_this_run)]
 results = results.query('method == "autoregressive"')
+#
+import cProfile
+import pstats
 
-# for dataset, group in results.groupby('dataset'):
-# iterate in reverse order so that we can checkpoint our progress
-for dataset, group in reversed(list(results.groupby('dataset'))):
+profiler = cProfile.Profile()
+profiler.enable()
+
+for dataset, group in list(results.groupby('dataset')):
     # sample 300 examples per model
+    np.random.seed(42)
     question_ids = np.random.choice(group['i'].unique(), size=100, replace=False)
+    # breakpoint()
     print(f'Number of questions: {len(question_ids)}')
     group = group[group['i'].isin(question_ids)]
     print(f'Processing {dataset} with {len(group)} examples and {len(group["model"].unique())} models')
     # breakpoint()
-    output = roscoe(group)
+    output = roscoe(group.copy())
+
     # group.to_json(temp_save_path / f'{dataset}.json')
-    with open(temp_save_path / f'{dataset}.pkl', 'wb') as f:
-        pickle.dump(output, f)
+    # try:
+    #     output.to_json(temp_save_path / f'{dataset}.json')
+    # except Exception as e:
+    #     print(f'Error saving {dataset}')
+    #     print(e)
+    #     breakpoint()
+    try:
+        with open(temp_save_path / f'{dataset}.json', 'w') as f:
+            json.dump(output.to_dict('records'), f)
+    except Exception as e:
+        print(f'Error saving {dataset}')
+        print(e)
+        breakpoint()
+
+profiler.disable()
+
+# save the profile to a file
+profiler.dump_stats('profile.prof')

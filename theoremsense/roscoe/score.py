@@ -292,10 +292,10 @@ class Evaluator:
                 model_type, transformer_model
             )
             # Load model from HuggingFace Hub
-            if self.word_model_name:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.word_model_name)
-                self.model = AutoModel.from_pretrained(self.word_model_name)
-                self.model.eval().to(self.device)
+            # if self.word_model_name:
+            #     self.tokenizer = AutoTokenizer.from_pretrained(self.word_model_name)
+            #     self.model = AutoModel.from_pretrained(self.word_model_name)
+            #     self.model.eval().to(self.device)
         if contains_nli_scores(score_types):
             # Load model for NLI-type predictions
             self.nli_tokenizer = AutoTokenizer.from_pretrained(nli_model)
@@ -790,7 +790,7 @@ class Evaluator:
                 )
                 / 2.0
             )
-        if self.word_model_name:
+        if self.word_model_name and (FAITHFUL_WORD in score_types or REPETITION_WORD in score_types):
             h_word_embeddings = self.embed_words(hypo.chain)
             c_word_embeddings = self.embed_words(context.chain)
             if FAITHFUL_WORD in score_types:
