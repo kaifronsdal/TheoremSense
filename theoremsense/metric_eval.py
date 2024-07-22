@@ -8,12 +8,12 @@ parser.add_argument('--index', type=int, default=0)
 args = parser.parse_args()
 
 GPU_MAPPING = {
-    0: "2",
-    1: "3",
-    2: "4",
-    3: "5",
-    4: "6",
-    5: "7",
+    0: "3",
+    1: "5",
+    2: "6",
+    # 3: "5",
+    # 4: "6",
+    # 5: "7",
 }
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -159,8 +159,8 @@ from roscoe.score import Evaluator
 
 class ROSCOE(Metric):
     def __init__(self, score_types=REASONING_SCORES, model_type=SIMSCE,
-                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large", discourse_batch=64 * 8,
-                 coherence_batch=64 * 8, ppl_batch=64 * 8, grammar_batch=64 * 8):
+                 transformer_model="facebook/roscoe-512-roberta-base", ppl_model="gpt2-large", discourse_batch=64 * 2,
+                 coherence_batch=64 * 2, ppl_batch=64 * 2, grammar_batch=64 * 2):
         super().__init__()
         self.evaluator = Evaluator(
             score_types=score_types,
@@ -194,8 +194,10 @@ class ROSCOE(Metric):
         self.evaluator.set_context(context)
         scores = self.evaluator.evaluate()
         # print(scores)
-        # results['ROSCOE'] = scores
-        return scores
+        # scores is a dictionary of lists
+        for key, value in scores.items():
+            results[key] = value
+        return results
 
 
 # comet = COMET()
@@ -220,6 +222,7 @@ temp_save_path.mkdir(parents=True, exist_ok=True)
 roscoe = ROSCOE()
 import pickle
 import numpy as np
+import json
 
 print(f'total len: {len(results.groupby("dataset"))}')
 
@@ -239,14 +242,27 @@ results = results.query('method == "autoregressive"')
 
 # for dataset, group in results.groupby('dataset'):
 # iterate in reverse order so that we can checkpoint our progress
-for dataset, group in reversed(list(results.groupby('dataset'))):
+for dataset, group in list(results.groupby('dataset')):
     # sample 300 examples per model
     question_ids = np.random.choice(group['i'].unique(), size=300, replace=False)
+    # breakpoint()
     print(f'Number of questions: {len(question_ids)}')
     group = group[group['i'].isin(question_ids)]
     print(f'Processing {dataset} with {len(group)} examples and {len(group["model"].unique())} models')
     # breakpoint()
     output = roscoe(group)
+
     # group.to_json(temp_save_path / f'{dataset}.json')
-    with open(temp_save_path / f'{dataset}.pkl', 'wb') as f:
-        pickle.dump(output, f)
+    try:
+        output.to_json(temp_save_path / f'{dataset}.json')
+    except Exception as e:
+        print(f'Error saving {dataset}')
+        print(e)
+        breakpoint()
+    try:
+        with open(temp_save_path / f'{dataset}.json', 'w') as f:
+            json.dump(output.to_dict(), f)
+    except Exception as e:
+        print(f'Error saving {dataset}')
+        print(e)
+        breakpoint()

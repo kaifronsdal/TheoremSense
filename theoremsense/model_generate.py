@@ -18,8 +18,9 @@ from utils import save_arguments
 import torch
 from torch.nn.functional import log_softmax
 
-from blocks import vLLM, Gemini, HFModel
-from blocks import Generator, Prompt, Batch, Block, Map, Retry
+from models import vLLM, Gemini, HFModel
+
+# from blocks import Generator, Prompt, Batch, Block, Map, Retry
 
 # load the name maps
 with open('name_maps.json', 'r') as f:
@@ -58,15 +59,13 @@ DATASET_ALIASES = {alias: dataset_name
 DATASET_ALIASES.update({dataset_name: dataset_name for dataset_name in DATASET_CONFIGS})
 
 
-class TeacherForcing(Block):
-    parallel = True
-
+class TeacherForcing:
     def __init__(self, model):
-        super().__init__()
         assert isinstance(model, HFModel)
         self.model = model
 
-    def compute_metrics(self, outputs: list[dict]):
+    @staticmethod
+    def compute_metrics(outputs: list[dict]):
         metrics = []
         for output in outputs:
             metric = dict()
@@ -102,18 +101,17 @@ class TeacherForcing(Block):
 
         return metrics
 
-    def process(self, input):
+    def generate(self, input):
         is_batch = True
-        if not isinstance(input, Batch):
-            input = Batch([input])
+        if not isinstance(input, list):
+            input = [input]
             is_batch = False
-        print('=' * 80)
-        print(f'len input: {len(input)}')
         output = self.model.generate_teacher_forcing(input)
-        print(f'len output: {len(output)}')
-        print('=' * 80)
         output = self.compute_metrics(output)
-        return Batch(output) if is_batch else output[0]
+        return output if is_batch else output[0]
+
+    def __call__(self, prompts):
+        return self.generate(prompts)
 
     def convert_tokens(self, tokens):
         return [self.model.tokenizer.decode(t) for t in tokens]
@@ -145,7 +143,8 @@ def get_args():
     parser.add_argument('--temperature', type=float, default=0.8, help='Temperature for sampling.')
     parser.add_argument('--top_p', type=float, default=0.95, help='Top-p sampling.')
     parser.add_argument('--max_tokens', type=int, default=2048, help='Maximum number of tokens to generate.')
-    parser.add_argument('--num_shots', type=int, default=0, help='Number of shots to generate')
+    # currently doesn't do anything because few-shot prompt is now hardcoded
+    # parser.add_argument('--num_shots', type=int, default=0, help='Number of shots to generate')
     # parser.add_argument('--num_logprob', type=int, default=100, help='Number of logprobs to generate')
 
     # generation method
@@ -164,6 +163,8 @@ def get_args():
         if any(indicator in args.model.lower() for indicator in CHAT_INDICATORS):
             args.use_chat = True
             print('Detected chat template format. Using chat template format.')
+        else:
+            print('Did not detect chat template format. Using standard template format.')
 
     # check if output file exists
     # if Path(args.output).exists() and not args.override:
@@ -221,56 +222,6 @@ def load_datasets(args):
     return datasets
 
 
-class NShotSample(Block):
-    """
-    Randomly samples n-shot examples from the batch.
-    """
-    parallel = True
-
-    def __init__(self, num_shots, subset=None, filter=None, seed=None):
-        super().__init__()
-        self.num_shots = num_shots
-
-        self.subset = subset
-        self.filter = filter
-        self.seed = seed
-
-    def process(self, input):
-        if not isinstance(input, Batch):
-            raise ValueError('NShotSample block must be used with a Batch input.')
-
-        subset = self.subset or list(range(len(input)))
-
-        assert len(input) > self.num_shots, \
-            f'Batch size must be at least {self.num_shots + 1} for {self.num_shots}-shot sampling.'
-        assert len(subset) > self.num_shots, \
-            f'Subset size must be at least {self.num_shots + 1} for {self.num_shots}-shot sampling.'
-        assert all(0 <= i < len(input) for i in subset), 'Invalid subset indices.'
-
-        if self.filter:
-            subset = [i for i in subset if self.filter(input[i], [input[j] for j in subset])]
-            assert len(subset) > self.num_shots, \
-                (f'Not enough examples in the subset after filtering. Subset size must be at least '
-                 f'{self.num_shots + 1} for {self.num_shots}-shot sampling.')
-
-        # select the few-shot examples
-        if self.seed is not None:
-            np.random.seed(self.seed)
-        outputs = []
-        for i, ex in enumerate(input):
-            few_shot_sample = np.random.choice(subset, self.num_shots + 1, replace=False)
-            # remove the current example from the few-shot sample if it is in the sample
-            few_shot_sample = few_shot_sample[few_shot_sample != i][:self.num_shots]
-
-            output = {
-                'input': ex,
-                'n_shot': [input[i] for i in few_shot_sample]
-            }
-            outputs.append(output)
-
-        return Batch(outputs)
-
-
 COT_PROMPT = '\nPlease reason step by step, and put your final answer within \\boxed{}.'
 
 PROMPT = r"""Problem:
@@ -316,69 +267,44 @@ $$-\frac{3}{2}a=b\Rightarrow\frac{a}{b}=\boxed{-\frac{2}{3}}.$$
 Final Answer: The final answer is $-\frac{2}{3}$. I hope it is correct."""
 
 
-# return PROMPT + "\n\n" + "Problem:" + "\n" + doc["problem"] + "\n\n" + "Solution:"
+def craft_standard_prompt(input):
+    _question_format = 'Problem: {problem}\n\nSolution: {solution}'
 
-def craft_prompt(input):
-    n = len(input['n_shot'])
-    _question_format = 'Question {i}: {question}{extra}\n\nAnswer {i}: {answer}'
-
-    prompt = f'Answer the following {n + 1} questions:\n\n'
-    for i, sample in enumerate(input['n_shot']):
-        prompt += _question_format.format(i=i + 1, question=sample['problem'],
-                                          answer=sample['solution'], extra=COT_PROMPT)
-        prompt += '\n\n'
-
-    prompt += _question_format.format(i=n + 1, question=input['input']['problem'], answer='', extra=COT_PROMPT)
+    prompt = PROMPT + '\n\n' + _question_format.format(problem=input['problem'] + COT_PROMPT, solution='')
     return prompt
 
 
 def craft_chat_prompt(input):
-    prompt = []
-    for sample in input['n_shot']:
-        prompt.append({'role': 'user', 'content': sample['problem'] + COT_PROMPT})
-        prompt.append({'role': 'assistant', 'content': sample['solution']})
+    user_prompt = craft_standard_prompt(input)
 
-    prompt.append({'role': 'user', 'content': input['input']['problem'] + COT_PROMPT})
+    # TODO: Perhaps separate out nshot into separate messages
+    prompt = [{'role': 'user', 'content': user_prompt}]
+
     return prompt
 
 
-def prompt_generator(args):
-    craft_prompt_fn = craft_chat_prompt if args.use_chat else craft_prompt
-
-    def filter_longest(ex, inputs):
-        # filter out the longest 50% of the examples
-        median = np.percentile([len(e['problem'] + e['solution']) for e in inputs], 50)
-        return len(ex['problem'] + ex['solution']) < median
-
-    return NShotSample(args.num_shots, filter=filter_longest, seed=args.seed) >> Map(craft_prompt_fn)
-
-
-def hard_coded_prompt_generator(args):
+def craft_prompt(args):
     if args.method == 'teacher_forcing':
         def hard_coded_prompt(input):
             return {
-                'question': PROMPT + "\n\n" + "Problem:" + "\n" + input['problem'] + "\n\n" + "Solution:",
+                'question': craft_standard_prompt(input),
                 'solution': input['solution']
             }
 
-        return Map(hard_coded_prompt)
+        return hard_coded_prompt
     else:
-        def hard_coded_prompt(input):
-            return PROMPT + "\n\n" + "Problem:" + "\n" + input['problem'] + "\n\n" + "Solution:"
+        prompt_format = craft_chat_prompt if args.use_chat else craft_standard_prompt
 
-        return Map(hard_coded_prompt)
+        def hard_coded_prompt(input):
+            return prompt_format(input)
+
+        return hard_coded_prompt
 
 
 def evaluate(gen, batch, args):
-    # if args.method == 'teacher_forcing':
-    #     pipeline = prompt_generator(args) >> gen
-    # else:
-    #     def filter_answer(x: str):
-    #         return '\\boxed' in x  # or 'The answer is' in x
-    #
-    #     pipeline = prompt_generator(args) >> Retry(gen, max_retries=10, filter=filter_answer)
-    pipeline = hard_coded_prompt_generator(args) >> gen
-    return pipeline(batch)
+    prompt_gen = craft_prompt(args)
+    prompts = [prompt_gen(ex) for ex in batch]
+    return gen(prompts)
 
 
 def eval(args):
@@ -388,7 +314,7 @@ def eval(args):
     if args.method == 'teacher_forcing':
         gen = TeacherForcing(model)
     elif args.method == 'autoregressive':
-        gen = Generator(model, prepend_history=False)
+        gen = model
     else:
         raise ValueError(f'Unknown method {args.method}')
 
@@ -399,7 +325,6 @@ def eval(args):
     # Generate the predictions
     for dataset_name, dataset in datasets.items():
         print(f'Generating predictions for {dataset_name}...')
-        batch = Batch(dataset)
 
         save_dir = (
                 Path(args.output).expanduser()
@@ -411,14 +336,14 @@ def eval(args):
             print(f'Output path {save_dir} already exists. Use --override to overwrite. Skipping...')
             continue
 
-        save_dir.mkdir(parents=True, exist_ok=True)
+        predictions = evaluate(gen, dataset, args)
 
-        predictions = evaluate(gen, batch, args)
+        save_dir.mkdir(parents=True, exist_ok=True)
 
         # with open(save_dir / 'output.pkl', 'wb') as f:
         #     import pickle
         #     pickle.dump(predictions, f)
-        
+
         with open(save_dir / 'output.json', 'w') as f:
             json.dump(predictions, f, indent=4)
 

@@ -790,7 +790,7 @@ class Evaluator:
                 )
                 / 2.0
             )
-        if self.word_model_name:
+        if self.word_model_name and (FAITHFUL_WORD in score_types or REPETITION_WORD in score_types):
             h_word_embeddings = self.embed_words(hypo.chain)
             c_word_embeddings = self.embed_words(context.chain)
             if FAITHFUL_WORD in score_types:
